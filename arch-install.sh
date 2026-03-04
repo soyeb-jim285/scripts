@@ -159,7 +159,7 @@ if ! grep -q "^GRUB_DISABLE_OS_PROBER=false" /etc/default/grub; then
   echo "GRUB_DISABLE_OS_PROBER=false" >> /etc/default/grub
   echo "    Enabled os-prober in /etc/default/grub"
 fi
-grub-mkconfig -o /boot/grub/grub.cfg
+grub-mkconfig -o /boot/efi/grub/grub.cfg
 echo "    GRUB config regenerated."
 
 echo ""
