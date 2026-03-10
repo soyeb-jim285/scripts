@@ -138,6 +138,14 @@ PACCONF
 
   if [[ ! -d /etc/pacman.d/gnupg ]]; then
     echo "Initializing pacman keyring (this may take a moment)..."
+    # Install archlinux-keyring (provides /usr/share/pacman/keyrings/archlinux.gpg)
+    if [[ ! -f /usr/share/pacman/keyrings/archlinux.gpg ]]; then
+      echo "Installing archlinux-keyring from source..."
+      BUILD_DIR=$(mktemp -d)
+      git clone https://gitlab.archlinux.org/archlinux/archlinux-keyring.git "$BUILD_DIR/archlinux-keyring"
+      make -C "$BUILD_DIR/archlinux-keyring" install
+      rm -rf "$BUILD_DIR"
+    fi
     pacman-key --init
     pacman-key --populate archlinux
   fi
