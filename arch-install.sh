@@ -259,7 +259,11 @@ echo ""
 echo ">>> Step 4: Running pacstrap (this will take a while)..."
 echo "    Packages: $ALL_PKGS"
 echo ""
-pacstrap -K -C /etc/pacman.conf "$MOUNT" $ALL_PKGS
+# Copy pacman config into target so pacstrap can find repos
+mkdir -p "$MOUNT/etc/pacman.d"
+cp /etc/pacman.conf "$MOUNT/etc/pacman.conf"
+cp /etc/pacman.d/mirrorlist "$MOUNT/etc/pacman.d/mirrorlist"
+pacstrap "$MOUNT" $ALL_PKGS
 
 # --- STEP 5: Generate fstab ---
 echo ""
