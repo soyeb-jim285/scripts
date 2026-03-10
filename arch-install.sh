@@ -46,6 +46,9 @@ MISSING_DEPS=()
 if ! command -v fzf &>/dev/null; then
   MISSING_DEPS+=("fzf")
 fi
+if ! command -v pacman &>/dev/null; then
+  MISSING_DEPS+=("pacman")
+fi
 if ! command -v pacstrap &>/dev/null; then
   MISSING_DEPS+=("arch-install-scripts")
 fi
@@ -62,7 +65,15 @@ if [[ ${#MISSING_DEPS[@]} -gt 0 ]]; then
   fi
 
   if [[ "$DISTRO" == "arch" ]]; then
-    pacman -S --needed --noconfirm "${MISSING_DEPS[@]}"
+    # Map back to Arch package names
+    ARCH_PKGS=()
+    for dep in "${MISSING_DEPS[@]}"; do
+      case "$dep" in
+        pacman) ;; # already installed on Arch
+        *) ARCH_PKGS+=("$dep") ;;
+      esac
+    done
+    [[ ${#ARCH_PKGS[@]} -gt 0 ]] && pacman -S --needed --noconfirm "${ARCH_PKGS[@]}"
   else
     # Ubuntu/Debian
     apt update
@@ -71,18 +82,64 @@ if [[ ${#MISSING_DEPS[@]} -gt 0 ]]; then
         fzf|os-prober)
           apt install -y "$dep"
           ;;
+        pacman)
+          echo "Installing pacman from source..."
+          apt install -y build-essential meson ninja-build pkg-config \
+            libarchive-dev libcurl4-openssl-dev libgpgme-dev libssl-dev \
+            python3 libarchive-tools zstd
+          BUILD_DIR=$(mktemp -d)
+          git clone https://gitlab.archlinux.org/pacman/pacman.git "$BUILD_DIR/pacman"
+          cd "$BUILD_DIR/pacman"
+          # Use latest release tag
+          LATEST_TAG=$(git describe --tags --abbrev=0)
+          git checkout "$LATEST_TAG"
+          meson setup build
+          ninja -C build
+          ninja -C build install
+          cd /
+          rm -rf "$BUILD_DIR"
+          ldconfig
+          echo "pacman installed."
+          ;;
         arch-install-scripts)
           echo "Installing arch-install-scripts from source..."
           apt install -y make m4 asciidoc git
-          TMPDIR=$(mktemp -d)
-          git clone https://gitlab.archlinux.org/archlinux/arch-install-scripts.git "$TMPDIR/arch-install-scripts"
-          make -C "$TMPDIR/arch-install-scripts"
-          make -C "$TMPDIR/arch-install-scripts" install
-          rm -rf "$TMPDIR"
+          BUILD_DIR=$(mktemp -d)
+          git clone https://gitlab.archlinux.org/archlinux/arch-install-scripts.git "$BUILD_DIR/arch-install-scripts"
+          make -C "$BUILD_DIR/arch-install-scripts"
+          make -C "$BUILD_DIR/arch-install-scripts" install
+          rm -rf "$BUILD_DIR"
           echo "arch-install-scripts installed."
           ;;
       esac
     done
+  fi
+fi
+
+# --- On Ubuntu: set up pacman.conf and keyring if missing ---
+if [[ "$DISTRO" == "ubuntu" ]]; then
+  if [[ ! -f /etc/pacman.conf ]]; then
+    echo "Creating /etc/pacman.conf..."
+    cat > /etc/pacman.conf <<'PACCONF'
+[options]
+Architecture = auto
+SigLevel = Required DatabaseOptional
+LocalFileSigLevel = Optional
+
+[core]
+Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch
+
+[extra]
+Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch
+PACCONF
+    mkdir -p /etc/pacman.d
+    echo "Server = https://geo.mirror.pkgbuild.com/\$repo/os/\$arch" > /etc/pacman.d/mirrorlist
+  fi
+
+  if [[ ! -d /etc/pacman.d/gnupg ]]; then
+    echo "Initializing pacman keyring (this may take a moment)..."
+    pacman-key --init
+    pacman-key --populate archlinux
   fi
 fi
 
