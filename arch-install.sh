@@ -117,26 +117,26 @@ if [[ ${#MISSING_DEPS[@]} -gt 0 ]]; then
 fi
 
 # --- On Ubuntu: set up pacman.conf and keyring if missing ---
+if [[ "$DISTRO" == "arch" ]]; then
+  PACMAN_CONF="/etc/pacman.conf"
+else
+  PACMAN_CONF="/tmp/pacman-arch.conf"
+fi
 if [[ "$DISTRO" == "ubuntu" ]]; then
-  mkdir -p /etc/pacman.d
-  if [[ ! -f /etc/pacman.conf ]]; then
-    echo "Creating /etc/pacman.conf..."
-    cat > /etc/pacman.conf <<'PACCONF'
+  # Always write a known-good config to a predictable location
+  cat > "$PACMAN_CONF" <<'PACCONF'
 [options]
-Architecture = auto
+Architecture = x86_64
 SigLevel = Required DatabaseOptional
 LocalFileSigLevel = Optional
 
 [core]
-Include = /etc/pacman.d/mirrorlist
+Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch
 
 [extra]
-Include = /etc/pacman.d/mirrorlist
+Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch
 PACCONF
-  fi
-  if [[ ! -f /etc/pacman.d/mirrorlist ]]; then
-    echo "Server = https://geo.mirror.pkgbuild.com/\$repo/os/\$arch" > /etc/pacman.d/mirrorlist
-  fi
+  echo "Wrote pacman config to $PACMAN_CONF"
 
   if [[ ! -d /etc/pacman.d/gnupg ]]; then
     echo "Initializing pacman keyring (this may take a moment)..."
@@ -266,11 +266,7 @@ echo ""
 echo ">>> Step 4: Running pacstrap (this will take a while)..."
 echo "    Packages: $ALL_PKGS"
 echo ""
-# Copy pacman config into target so pacstrap can find repos
-mkdir -p "$MOUNT/etc/pacman.d"
-cp /etc/pacman.conf "$MOUNT/etc/pacman.conf"
-cp /etc/pacman.d/mirrorlist "$MOUNT/etc/pacman.d/mirrorlist"
-pacstrap "$MOUNT" $ALL_PKGS
+pacstrap -C "$PACMAN_CONF" "$MOUNT" $ALL_PKGS
 
 # --- STEP 5: Generate fstab ---
 echo ""
