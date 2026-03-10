@@ -170,6 +170,7 @@ if [[ "$DISTRO" == "ubuntu" ]]; then
   {
     echo "[options]"
     echo "Architecture = x86_64"
+    echo "ParallelDownloads = 5"
     echo "SigLevel = Required DatabaseOptional"
     echo "LocalFileSigLevel = Optional"
     echo ""
