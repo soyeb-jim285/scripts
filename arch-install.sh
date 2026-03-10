@@ -238,11 +238,16 @@ if [[ "$CONFIRM" != "yes" ]]; then
 fi
 echo ""
 echo ">>> Step 2: Formatting $NEW_PART_DEV as ext4..."
-# Unmount if still mounted (e.g. from a previous interrupted run)
+# Unmount and release the partition (e.g. from a previous interrupted run)
 if mountpoint -q "$MOUNT" 2>/dev/null; then
-  umount -R "$MOUNT"
+  umount -R "$MOUNT" 2>/dev/null || umount -lR "$MOUNT"
 fi
+# Unmount the target partition wherever it may be mounted
 umount "$NEW_PART_DEV" 2>/dev/null || true
+# Kill any processes still using the partition
+fuser -km "$NEW_PART_DEV" 2>/dev/null || true
+# Wait briefly for the kernel to release the device
+sleep 1
 mkfs.ext4 -L "arch-test" "$NEW_PART_DEV"
 echo ""
 
