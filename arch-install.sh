@@ -46,6 +46,12 @@ MISSING_DEPS=()
 if ! command -v fzf &>/dev/null; then
   MISSING_DEPS+=("fzf")
 fi
+if ! command -v jq &>/dev/null; then
+  MISSING_DEPS+=("jq")
+fi
+if ! command -v curl &>/dev/null; then
+  MISSING_DEPS+=("curl")
+fi
 if ! command -v pacman &>/dev/null; then
   MISSING_DEPS+=("pacman")
 fi
@@ -79,7 +85,7 @@ if [[ ${#MISSING_DEPS[@]} -gt 0 ]]; then
     apt update
     for dep in "${MISSING_DEPS[@]}"; do
       case "$dep" in
-        fzf|os-prober)
+        fzf|jq|curl|os-prober)
           apt install -y "$dep"
           ;;
         pacman)
@@ -123,20 +129,60 @@ else
   PACMAN_CONF="/tmp/pacman-arch.conf"
 fi
 if [[ "$DISTRO" == "ubuntu" ]]; then
-  # Always write a known-good config to a predictable location
-  cat > "$PACMAN_CONF" <<'PACCONF'
-[options]
-Architecture = x86_64
-SigLevel = Required DatabaseOptional
-LocalFileSigLevel = Optional
+  # --- Select mirror country ---
+  echo ""
+  echo ">>> Fetching Arch Linux mirror list..."
+  MIRROR_JSON=$(curl -sL "https://archlinux.org/mirrors/status/json/")
 
-[core]
-Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch
+  # Build country list with mirror counts
+  COUNTRY_LIST=$(echo "$MIRROR_JSON" | jq -r '
+    [.urls[] | select(.active == true and .protocol == "https")]
+    | group_by(.country)
+    | map(select(.[0].country != null and .[0].country != ""))
+    | map({country: .[0].country, count: length})
+    | sort_by(.country)
+    | .[] | "\(.country) (\(.count) mirrors)"
+  ')
 
-[extra]
-Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch
-PACCONF
-  echo "Wrote pacman config to $PACMAN_CONF"
+  echo ""
+  SELECTED_COUNTRY=$(echo "$COUNTRY_LIST" | fzf \
+    --prompt="Select mirror country > " \
+    --height=~50% \
+    --no-multi \
+    --reverse \
+    --border=rounded \
+    --border-label=" Mirror Country " \
+    --color="border:cyan,header:yellow,label:cyan,prompt:green" \
+    --info=hidden) || { echo "  Aborted."; exit 1; }
+
+  # Extract just the country name (strip the count)
+  COUNTRY=$(echo "$SELECTED_COUNTRY" | sed 's/ ([0-9]* mirrors)$//')
+  echo "  Selected: $COUNTRY"
+
+  # Get HTTPS mirrors for that country, sorted by score (lower is better)
+  MIRROR_SERVERS=$(echo "$MIRROR_JSON" | jq -r --arg country "$COUNTRY" '
+    [.urls[] | select(.active == true and .protocol == "https" and .country == $country)]
+    | sort_by(.score // 999)
+    | .[].url
+  ')
+
+  # Build pacman.conf with selected mirrors
+  {
+    echo "[options]"
+    echo "Architecture = x86_64"
+    echo "SigLevel = Required DatabaseOptional"
+    echo "LocalFileSigLevel = Optional"
+    echo ""
+    for repo in core extra; do
+      echo "[$repo]"
+      while IFS= read -r mirror; do
+        echo "Server = ${mirror}\$repo/os/\$arch"
+      done <<< "$MIRROR_SERVERS"
+      echo ""
+    done
+  } > "$PACMAN_CONF"
+
+  echo "  Wrote pacman config with $(echo "$MIRROR_SERVERS" | wc -l) mirrors to $PACMAN_CONF"
 
   if [[ ! -d /etc/pacman.d/gnupg ]]; then
     echo "Initializing pacman keyring (this may take a moment)..."
