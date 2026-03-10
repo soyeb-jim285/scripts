@@ -259,7 +259,7 @@ echo ""
 echo ">>> Step 4: Running pacstrap (this will take a while)..."
 echo "    Packages: $ALL_PKGS"
 echo ""
-pacstrap -K "$MOUNT" $ALL_PKGS
+pacstrap -K -C /etc/pacman.conf "$MOUNT" $ALL_PKGS
 
 # --- STEP 5: Generate fstab ---
 echo ""
