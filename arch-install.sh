@@ -93,7 +93,7 @@ if [[ ${#MISSING_DEPS[@]} -gt 0 ]]; then
           # Use latest release tag
           LATEST_TAG=$(git describe --tags --abbrev=0)
           git checkout "$LATEST_TAG"
-          meson setup build
+          meson setup build --prefix=/usr
           ninja -C build
           ninja -C build install
           cd /
@@ -140,10 +140,14 @@ PACCONF
     echo "Initializing pacman keyring (this may take a moment)..."
     # Install archlinux-keyring (provides /usr/share/pacman/keyrings/archlinux.gpg)
     if [[ ! -f /usr/share/pacman/keyrings/archlinux.gpg ]]; then
-      echo "Installing archlinux-keyring from source..."
+      echo "Installing archlinux-keyring from Arch mirror..."
       BUILD_DIR=$(mktemp -d)
-      git clone https://gitlab.archlinux.org/archlinux/archlinux-keyring.git "$BUILD_DIR/archlinux-keyring"
-      make -C "$BUILD_DIR/archlinux-keyring" install
+      # Download the package from the Arch mirror and extract keyring files
+      KEYRING_URL="https://geo.mirror.pkgbuild.com/core/os/x86_64/"
+      KEYRING_PKG=$(curl -sL "$KEYRING_URL" | grep -oP 'archlinux-keyring-[0-9]+-[0-9]+-any\.pkg\.tar\.zst' | head -1)
+      curl -sL "${KEYRING_URL}${KEYRING_PKG}" -o "$BUILD_DIR/archlinux-keyring.pkg.tar.zst"
+      mkdir -p /usr/share/pacman/keyrings
+      tar -I zstd -xf "$BUILD_DIR/archlinux-keyring.pkg.tar.zst" -C / usr/share/pacman/keyrings/
       rm -rf "$BUILD_DIR"
     fi
     pacman-key --init
