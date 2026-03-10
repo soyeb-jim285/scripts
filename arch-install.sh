@@ -171,8 +171,7 @@ if [[ "$DISTRO" == "ubuntu" ]]; then
     echo "[options]"
     echo "Architecture = x86_64"
     echo "ParallelDownloads = 5"
-    echo "SigLevel = Required DatabaseOptional"
-    echo "LocalFileSigLevel = Optional"
+    echo "SigLevel = Never"
     echo ""
     for repo in core extra; do
       echo "[$repo]"
@@ -185,23 +184,6 @@ if [[ "$DISTRO" == "ubuntu" ]]; then
 
   echo "  Wrote pacman config with $(echo "$MIRROR_SERVERS" | wc -l) mirrors to $PACMAN_CONF"
 
-  if [[ ! -d /etc/pacman.d/gnupg ]]; then
-    echo "Initializing pacman keyring (this may take a moment)..."
-    # Install archlinux-keyring (provides /usr/share/pacman/keyrings/archlinux.gpg)
-    if [[ ! -f /usr/share/pacman/keyrings/archlinux.gpg ]]; then
-      echo "Installing archlinux-keyring from Arch mirror..."
-      BUILD_DIR=$(mktemp -d)
-      # Download the package from the Arch mirror and extract keyring files
-      KEYRING_URL="https://geo.mirror.pkgbuild.com/core/os/x86_64/"
-      KEYRING_PKG=$(curl -sL "$KEYRING_URL" | grep -oP 'archlinux-keyring-[0-9]+-[0-9]+-any\.pkg\.tar\.zst' | head -1)
-      curl -sL "${KEYRING_URL}${KEYRING_PKG}" -o "$BUILD_DIR/archlinux-keyring.pkg.tar.zst"
-      mkdir -p /usr/share/pacman/keyrings
-      tar -I zstd -xf "$BUILD_DIR/archlinux-keyring.pkg.tar.zst" -C / usr/share/pacman/keyrings/
-      rm -rf "$BUILD_DIR"
-    fi
-    pacman-key --init
-    pacman-key --populate archlinux
-  fi
 fi
 
 echo "============================================"
@@ -313,7 +295,7 @@ echo ""
 echo ">>> Step 4: Running pacstrap (this will take a while)..."
 echo "    Packages: $ALL_PKGS"
 echo ""
-pacstrap -K -C "$PACMAN_CONF" "$MOUNT" $ALL_PKGS
+pacstrap -C "$PACMAN_CONF" "$MOUNT" $ALL_PKGS
 
 # --- STEP 5: Generate fstab ---
 echo ""
