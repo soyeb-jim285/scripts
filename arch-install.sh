@@ -248,7 +248,7 @@ umount "$NEW_PART_DEV" 2>/dev/null || true
 fuser -km "$NEW_PART_DEV" 2>/dev/null || true
 # Wait briefly for the kernel to release the device
 sleep 1
-mkfs.ext4 -L "arch-test" "$NEW_PART_DEV"
+mkfs.ext4 -F -L "arch-test" "$NEW_PART_DEV"
 echo ""
 
 # --- STEP 3: Mount ---
