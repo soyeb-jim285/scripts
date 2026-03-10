@@ -118,6 +118,7 @@ fi
 
 # --- On Ubuntu: set up pacman.conf and keyring if missing ---
 if [[ "$DISTRO" == "ubuntu" ]]; then
+  mkdir -p /etc/pacman.d
   if [[ ! -f /etc/pacman.conf ]]; then
     echo "Creating /etc/pacman.conf..."
     cat > /etc/pacman.conf <<'PACCONF'
@@ -127,12 +128,13 @@ SigLevel = Required DatabaseOptional
 LocalFileSigLevel = Optional
 
 [core]
-Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch
+Include = /etc/pacman.d/mirrorlist
 
 [extra]
-Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch
+Include = /etc/pacman.d/mirrorlist
 PACCONF
-    mkdir -p /etc/pacman.d
+  fi
+  if [[ ! -f /etc/pacman.d/mirrorlist ]]; then
     echo "Server = https://geo.mirror.pkgbuild.com/\$repo/os/\$arch" > /etc/pacman.d/mirrorlist
   fi
 
