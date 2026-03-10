@@ -1,6 +1,6 @@
 #!/bin/bash
 # Arch Linux installation script
-# Run as root from your existing Arch install
+# Run as root from an existing Arch or Ubuntu install
 # Target: ~101.5 GB free space on /dev/nvme0n1
 set -e
 
@@ -8,6 +8,24 @@ if [[ $EUID -ne 0 ]]; then
   echo "This script must be run as root: sudo bash $0"
   exit 1
 fi
+
+# --- Detect host distro ---
+if [[ -f /etc/os-release ]]; then
+  . /etc/os-release
+  case "$ID" in
+    arch)   DISTRO="arch" ;;
+    ubuntu|debian) DISTRO="ubuntu" ;;
+    *)
+      echo "ERROR: Unsupported host distro: $ID"
+      echo "This script supports Arch and Ubuntu/Debian."
+      exit 1
+      ;;
+  esac
+else
+  echo "ERROR: Cannot detect distro (/etc/os-release not found)."
+  exit 1
+fi
+echo "Detected host distro: $DISTRO"
 
 DISK="/dev/nvme0n1"
 EFI_PART="${DISK}p1" # existing EFI — DO NOT FORMAT
@@ -22,11 +40,50 @@ FONT_PKGS="noto-fonts ttf-dejavu"
 
 ALL_PKGS="$BASE_PKGS $SYSTEM_PKGS $GPU_PKGS $AUDIO_PKGS $FONT_PKGS"
 
-# Check for fzf
+# --- Check and install dependencies ---
+MISSING_DEPS=()
+
 if ! command -v fzf &>/dev/null; then
-  echo "ERROR: fzf is required for partition selection."
-  echo "Install it with: sudo pacman -S fzf"
-  exit 1
+  MISSING_DEPS+=("fzf")
+fi
+if ! command -v pacstrap &>/dev/null; then
+  MISSING_DEPS+=("arch-install-scripts")
+fi
+if [[ "$DISTRO" == "ubuntu" ]] && ! command -v os-prober &>/dev/null; then
+  MISSING_DEPS+=("os-prober")
+fi
+
+if [[ ${#MISSING_DEPS[@]} -gt 0 ]]; then
+  echo "Missing dependencies: ${MISSING_DEPS[*]}"
+  read -p "Install them now? [y/N] " INSTALL_DEPS
+  if [[ "$INSTALL_DEPS" != "y" && "$INSTALL_DEPS" != "Y" ]]; then
+    echo "Cannot continue without dependencies. Aborting."
+    exit 1
+  fi
+
+  if [[ "$DISTRO" == "arch" ]]; then
+    pacman -S --needed --noconfirm "${MISSING_DEPS[@]}"
+  else
+    # Ubuntu/Debian
+    apt update
+    for dep in "${MISSING_DEPS[@]}"; do
+      case "$dep" in
+        fzf|os-prober)
+          apt install -y "$dep"
+          ;;
+        arch-install-scripts)
+          echo "Installing arch-install-scripts from source..."
+          apt install -y make m4 asciidoc git
+          TMPDIR=$(mktemp -d)
+          git clone https://gitlab.archlinux.org/archlinux/arch-install-scripts.git "$TMPDIR/arch-install-scripts"
+          make -C "$TMPDIR/arch-install-scripts"
+          make -C "$TMPDIR/arch-install-scripts" install
+          rm -rf "$TMPDIR"
+          echo "arch-install-scripts installed."
+          ;;
+      esac
+    done
+  fi
 fi
 
 echo "============================================"
@@ -112,6 +169,11 @@ if [[ "$CONFIRM" != "yes" ]]; then
 fi
 echo ""
 echo ">>> Step 2: Formatting $NEW_PART_DEV as ext4..."
+# Unmount if still mounted (e.g. from a previous interrupted run)
+if mountpoint -q "$MOUNT" 2>/dev/null; then
+  umount -R "$MOUNT"
+fi
+umount "$NEW_PART_DEV" 2>/dev/null || true
 mkfs.ext4 -L "arch-test" "$NEW_PART_DEV"
 echo ""
 
